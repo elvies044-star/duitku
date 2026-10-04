@@ -285,11 +285,19 @@ function gambarGauge(s) {
   el.addEventListener("pointerleave", () => { el.style.transition = ""; el.style.transform = ""; el.style.removeProperty("--hx"); el.style.removeProperty("--hy"); });
 })();
 
+// angka tidak boleh menabrak meteran: kecilkan font sampai muat di kolomnya
+function pasLebar(el) {
+  el.style.fontSize = "";
+  let ukuran = parseFloat(getComputedStyle(el).fontSize);
+  while (el.scrollWidth > el.clientWidth + 1 && ukuran > 20) { ukuran -= 1; el.style.fontSize = ukuran + "px"; }
+}
+addEventListener("resize", () => { const a = $("angka"); if (a && a.dataset.n) pasLebar(a); });
 // angka naik halus
 function hitungNaik(el, ke) {
   const dari = Number(el.dataset.n || 0);
   el.dataset.n = ke;
   const tulis = (v) => { el.innerHTML = `<small>Rp</small>${Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`; };
+  tulis(Math.max(dari, ke)); pasLebar(el);       // ukur dulu angka terpanjang → kecilkan font kalau perlu
   if (matchMedia("(prefers-reduced-motion: reduce)").matches || dari === ke) return tulis(ke);
   const t0 = performance.now(), dur = 900;
   const langkah = (t) => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3); tulis(dari + (ke - dari) * e); if (p < 1) requestAnimationFrame(langkah); };

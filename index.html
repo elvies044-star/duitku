@@ -304,7 +304,54 @@
   @keyframes goyang { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
   .ket.kecil { font-size: 12px; margin: 0; color: var(--ink-3); }
   @media (max-width: 420px) { #kunciTxt { display: none; } #btnKunci { padding: 0 12px; } }
+
+  /* ===== Diagram lingkaran kategori ===== */
+  .kat-wrap { display: grid; gap: 12px; container-type: inline-size; }
+  .donat { position: relative; width: min(232px, 80%); aspect-ratio: 1; margin: 2px auto 4px; }
+  .donat svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .donat .seg { stroke: var(--card); stroke-width: 2; stroke-linejoin: round; cursor: pointer; outline: none;
+    transition: transform .3s var(--pegas), opacity .2s var(--ease); }
+  .donat.ada-aktif .seg { opacity: .3; }
+  .donat .seg.aktif { opacity: 1; }
+  .donat .seg:focus-visible { stroke: var(--ink); stroke-width: 2.5; }
+  .donat .cincin-kosong { fill: none; stroke: var(--card-2); stroke-width: 30; }
+  .donat .putar { transform-origin: 100px 100px; }
+  .donat .putar.masuk { animation: donatMasuk .9s var(--ease) both; }
+  @keyframes donatMasuk { from { transform: rotate(-70deg) scale(.86); opacity: 0; } to { transform: none; opacity: 1; } }
+  .donat-tengah { position: absolute; inset: 24%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; gap: 2px; }
+  .donat-tengah .l { font-family: var(--serif); font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .donat-tengah b { font-family: var(--serif); font-weight: 800; font-size: clamp(16px, 6.4cqi, 23px); letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
+  .donat-tengah .s { font-size: 11.5px; color: var(--ink-3); }
+  .donat-tip { position: absolute; left: 0; top: 0; z-index: 6; pointer-events: none; width: max-content; max-width: 220px; padding: 10px 12px; border-radius: 12px;
+    background: #0B1B3A; color: #fff; font-size: 12px; line-height: 1.45; box-shadow: 0 10px 28px -8px rgba(11,27,58,.45);
+    opacity: 0; transform: translate(-50%, calc(-100% - 10px)) scale(.96); transition: opacity .14s, transform .14s var(--ease); }
+  .donat-tip.on { opacity: 1; transform: translate(-50%, calc(-100% - 14px)); }
+  .donat-tip.bawah { transform: translate(-50%, 10px) scale(.96); }
+  .donat-tip.bawah.on { transform: translate(-50%, 16px); }
+  .donat-tip .nilai { font-family: var(--serif); font-weight: 800; font-size: 16px; letter-spacing: -.01em; }
+  .donat-tip .nama { display: flex; align-items: center; gap: 7px; color: rgba(255,255,255,.85); font-weight: 600; }
+  .donat-tip .nama i { width: 12px; height: 3px; border-radius: 2px; flex: none; }
+  .donat-tip .rinci { color: rgba(255,255,255,.7); margin-top: 3px; }
+  .donat-detail { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s var(--ease), margin .28s var(--ease); margin: -6px 0; }
+  .donat-detail.on { grid-template-rows: 1fr; margin: 0; }
+  .donat-detail .isi { overflow: hidden; min-height: 0; }
+  .donat-detail.on .isi { padding: 12px 14px; border-radius: 14px; background: var(--card-2); border: 1px solid var(--line); }
+  .donat-detail .nilai { font-family: var(--serif); font-weight: 800; font-size: 18px; color: var(--ink); }
+  .donat-detail .nama { display: flex; align-items: center; gap: 7px; font-weight: 700; color: var(--ink-2); font-size: 13px; }
+  .donat-detail .nama i { width: 12px; height: 3px; border-radius: 2px; flex: none; }
+  .donat-detail .rinci { color: var(--ink-3); font-size: 12.5px; margin-top: 2px; }
+  .kat { transition: opacity .2s; cursor: default; }
+  .kat .vl small { color: var(--ink-3); font-weight: 600; margin-left: 6px; }
+  .kat-wrap.ada-aktif .kat { opacity: .4; }
+  .kat-wrap.ada-aktif .kat.aktif { opacity: 1; }
+  .kat.aktif .nm { color: var(--accent); }
+  @container (min-width: 420px) {
+    .kat-wrap { grid-template-columns: minmax(170px, 210px) minmax(0, 1fr); align-items: center; gap: 22px; }
+    .donat { width: 100%; margin: 0; }
+    .donat-detail { grid-column: 1 / -1; }
+  }
   @media (prefers-reduced-motion: reduce) {
+    .donat .putar.masuk { animation: none; }
     *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
     .muncul { opacity: 1; transform: none; }
   }
@@ -411,7 +458,14 @@
 
     <section class="kartu muncul a-kat">
       <div class="judul"><div><span class="no">03 — KATEGORI</span><h2>Ke mana uangnya</h2></div><span class="ket">bulan ini</span></div>
-      <div id="kategori"></div>
+      <div class="kat-wrap">
+        <div class="donat" id="donat">
+          <div class="donat-tengah" id="donatTengah" aria-hidden="true"></div>
+          <div class="donat-tip" id="donatTip" role="tooltip"></div>
+        </div>
+        <div class="donat-detail" id="donatDetail" aria-live="polite"><div class="isi" id="donatDetailIsi"></div></div>
+        <div id="kategori"></div>
+      </div>
     </section>
 
     <section class="kartu muncul a-porto">

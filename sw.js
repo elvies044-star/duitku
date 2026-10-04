@@ -1,6 +1,6 @@
 // Service worker Duitku: simpan tampilan agar cepat dibuka & bisa diinstal.
 // Data keuangan TIDAK pernah disimpan di cache.
-const VERSI = "duitku-v3-10";
+const VERSI = "duitku-v3-11";
 const SHELL = ["/", "/index.html", "/app.js", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (e) => {

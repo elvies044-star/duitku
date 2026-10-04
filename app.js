@@ -180,16 +180,22 @@ function render() {
   gambarArus();
   gambarHarian();
 
-  // kategori
-  const keluarBln = d.transaksi.filter((x) => x.tipe === "keluar" && x.tanggal.startsWith(bulan));
+  // kategori: diagram lingkaran + daftar (daftar = legenda & tabel angka)
+  const keluarBln = d.transaksi.filter((x) => x.tipe === "keluar" && x.nominal != null && x.tanggal.startsWith(bulan));
+  const totalBln = sum(keluarBln);
   const per = {};
-  keluarBln.forEach((x) => { per[x.kategori] = per[x.kategori] || { n: 0, w: x.warna }; per[x.kategori].n += x.nominal; });
+  keluarBln.forEach((x) => { per[x.kategori] = per[x.kategori] || { n: 0, jml: 0 }; per[x.kategori].n += x.nominal; per[x.kategori].jml++; });
   const kats = Object.entries(per).sort((a, c) => c[1].n - a[1].n);
   const maks = kats.length ? kats[0][1].n : 1;
-  $("kategori").innerHTML = kats.length ? kats.map(([nm, k]) =>
-    `<div class="kat" style="--c:${esc(k.w)}"><span class="nm">${esc(nm)}</span><span class="vl">${rp(k.n)}</span><div class="trk"><b data-w="${(k.n / maks) * 100}"></b></div></div>`).join("")
-    : `<div class="kosong">Belum ada pengeluaran bulan ini.</div>`;
-  requestAnimationFrame(() => $("kategori").querySelectorAll("b[data-w]").forEach((el) => { el.style.width = el.dataset.w + "%"; }));
+  const tandaKat = JSON.stringify(kats);
+  if (tandaKat !== tandaKatTerakhir) {
+    tandaKatTerakhir = tandaKat;
+    $("kategori").innerHTML = kats.length ? kats.map(([nm, k]) =>
+      `<div class="kat" data-grup="${esc(grupDonat(nm))}" style="--c:${warnaKat(nm)}"><span class="nm">${esc(nm)}</span><span class="vl">${rp(k.n)}<small>${persenTeks(k.n, totalBln)}</small></span><div class="trk"><b data-w="${(k.n / maks) * 100}"></b></div></div>`).join("")
+      : `<div class="kosong">Belum ada pengeluaran bulan ini.</div>`;
+    requestAnimationFrame(() => $("kategori").querySelectorAll("b[data-w]").forEach((el) => { el.style.width = el.dataset.w + "%"; }));
+    gambarDonat(keluarBln);
+  }
 
   // portofolio
   if (kunci) {
@@ -241,13 +247,134 @@ function render() {
       `<div class="grup"><span>${label(tg)}</span><span>${rp(sum(xs.filter((x) => x.tipe === "keluar")))}</span></div>` +
       xs.map((x) => {
         const t = TIPE[x.tipe] || TIPE.keluar;
-        return `<div class="baris${idTerlihat !== null && x.id > idTerlihat ? " baru" : ""}" style="--c:${esc(x.warna)}"><div class="t"><div class="n">${esc(x.deskripsi)}${t.label ? `<span class="tag" style="color:${t.warna}">${t.label}</span>` : ""}</div><div class="m">${esc(x.kategori)} · ${jam(x.waktu)}${x.metode ? " · " + esc(x.metode) : ""}</div></div><div class="a" style="color:${t.warna}">${x.nominal == null ? SAMAR : t.tanda + rp(x.nominal)}</div></div>`;
+        return `<div class="baris${idTerlihat !== null && x.id > idTerlihat ? " baru" : ""}" style="--c:${x.tipe === "keluar" ? warnaKat(x.kategori) : esc(x.warna)}"><div class="t"><div class="n">${esc(x.deskripsi)}${t.label ? `<span class="tag" style="color:${t.warna}">${t.label}</span>` : ""}</div><div class="m">${esc(x.kategori)} · ${jam(x.waktu)}${x.metode ? " · " + esc(x.metode) : ""}</div></div><div class="a" style="color:${t.warna}">${x.nominal == null ? SAMAR : t.tanda + rp(x.nominal)}</div></div>`;
       }).join("")).join("");
   }
   idTerlihat = d.transaksi.length ? Math.max(...d.transaksi.map((x) => x.id)) : 0;
   $("upd").textContent = "terakhir " + jam(new Date().toISOString());
   pasangSorotan();
 }
+
+
+// ===== Diagram lingkaran kategori =====
+// Warna mengikuti KATEGORI (bukan peringkat) supaya sama di semua tempat. 6 warna ini lolos uji
+// pembeda warna (termasuk buta warna) bila tampil bersamaan; kategori lain dilipat ke "Lainnya".
+const WARNA_KAT = { Makanan: "#eda100", Minuman: "#1baf7a", Transportasi: "#2a78d6", Belanja: "#e87ba4", Tagihan: "#4a3aa7", Hiburan: "#008300" };
+const WARNA_LAIN = "#9AA3B2";
+const warnaKat = (nm) => WARNA_KAT[nm] || WARNA_LAIN;
+const grupDonat = (nm) => (WARNA_KAT[nm] ? nm : "Lainnya");
+const persenTeks = (v, t) => { if (!t) return "0%"; const x = (v / t) * 100; return x > 0 && x < 1 ? "<1%" : Math.round(x) + "%"; };
+let titikTerakhir = null;
+let tandaKatTerakhir = "", donatPertama = true, donatSeg = [], donatTotal = 0, donatAktif = null;
+
+function gambarDonat(rows) {
+  const wadah = $("donat");
+  wadah.querySelectorAll("svg").forEach((x) => x.remove());
+  donatTotal = sum(rows);
+  const grup = new Map();
+  for (const x of rows) {
+    const g = grupDonat(x.kategori);
+    const o = grup.get(g) || { nama: g, n: 0, jml: 0, terbesar: null, isi: new Map() };
+    o.n += x.nominal; o.jml++;
+    if (!o.terbesar || x.nominal > o.terbesar.nominal) o.terbesar = x;
+    o.isi.set(x.kategori, (o.isi.get(x.kategori) || 0) + x.nominal);
+    grup.set(g, o);
+  }
+  donatSeg = [...grup.values()].sort((a, b) => (a.nama === "Lainnya") - (b.nama === "Lainnya") || b.n - a.n);
+  const svg = svgEl("svg", { viewBox: "0 0 200 200", role: "img", "aria-label": `Diagram lingkaran pengeluaran per kategori bulan ini, total ${rp(donatTotal)}` });
+  const putar = svgEl("g", { class: "putar" + (donatPertama && donatSeg.length ? " masuk" : "") });
+  svg.appendChild(putar);
+  const C = 100, R = 96, r = 64;
+  const titik = (rad, a) => [(C + rad * Math.cos(a)).toFixed(2), (C + rad * Math.sin(a)).toFixed(2)];
+  const busur = (a0, a1) => {
+    const besar = a1 - a0 > Math.PI ? 1 : 0;
+    const [x0, y0] = titik(R, a0), [x1, y1] = titik(R, a1), [x2, y2] = titik(r, a1), [x3, y3] = titik(r, a0);
+    return `M${x0} ${y0} A${R} ${R} 0 ${besar} 1 ${x1} ${y1} L${x2} ${y2} A${r} ${r} 0 ${besar} 0 ${x3} ${y3} Z`;
+  };
+  if (!donatTotal) {
+    putar.appendChild(svgEl("circle", { class: "cincin-kosong", cx: C, cy: C, r: (R + r) / 2 }));
+  } else {
+    let a0 = -Math.PI / 2;
+    donatSeg.forEach((s) => {
+      const sudut = (s.n / donatTotal) * Math.PI * 2, a1 = a0 + sudut, tengah = (a0 + a1) / 2;
+      s.dx = Math.cos(tengah) * 6; s.dy = Math.sin(tengah) * 6;
+      s.cx = C + ((R + r) / 2) * Math.cos(tengah); s.cy = C + ((R + r) / 2) * Math.sin(tengah);
+      const d = sudut >= Math.PI * 2 - 1e-6 ? busur(a0, a0 + Math.PI) + " " + busur(a0 + Math.PI, a0 + Math.PI * 2 - 1e-4) : busur(a0, a1);
+      const p = svgEl("path", { d, class: "seg", fill: s.nama === "Lainnya" ? WARNA_LAIN : warnaKat(s.nama), tabindex: 0, role: "button",
+        "aria-label": `${s.nama}: ${rp(s.n)}, ${persenTeks(s.n, donatTotal)} dari pengeluaran bulan ini, ${s.jml} transaksi` });
+      p.dataset.grup = s.nama; s.el = p;
+      putar.appendChild(p);
+      a0 = a1;
+    });
+  }
+  wadah.insertBefore(svg, $("donatTengah"));
+  donatPertama = false;
+  const aktifLama = donatAktif; donatAktif = null;
+  if (aktifLama && donatSeg.some((s) => s.nama === aktifLama)) aktifkanDonat(aktifLama, $("donatTip").classList.contains("on") ? titikTerakhir : null); else tulisTengah(null);
+}
+function tulisTengah(s) {
+  const t = $("donatTengah"); t.textContent = "";
+  const baris = (tag, kelas, teks) => { const e = document.createElement(tag); e.className = kelas; e.textContent = teks; t.appendChild(e); };
+  if (!donatTotal) { baris("span", "l", "Bulan ini"); baris("b", "", "Rp0"); baris("span", "s", "belum ada catatan"); return; }
+  if (!s) { baris("span", "l", "Total bulan ini"); baris("b", "", rp(donatTotal)); baris("span", "s", `${donatSeg.reduce((a, x) => a + x.jml, 0)} transaksi`); return; }
+  baris("span", "l", s.nama); baris("b", "", rp(s.n)); baris("span", "s", `${persenTeks(s.n, donatTotal)} · ${s.jml} transaksi`);
+}
+function isiTip(s, tip) {
+  tip.textContent = "";
+  const el = (tag, kelas, teks) => { const e = document.createElement(tag); if (kelas) e.className = kelas; if (teks != null) e.textContent = teks; tip.appendChild(e); return e; };
+  el("div", "nilai", rp(s.n));
+  const nm = el("div", "nama"); const kunci = document.createElement("i"); kunci.style.background = s.nama === "Lainnya" ? WARNA_LAIN : warnaKat(s.nama); nm.appendChild(kunci); nm.appendChild(document.createTextNode(s.nama));
+  el("div", "rinci", `${persenTeks(s.n, donatTotal)} dari total · ${s.jml} transaksi`);
+  if (s.terbesar) el("div", "rinci", `Terbesar: ${s.terbesar.deskripsi} ${rp(s.terbesar.nominal)}`);
+  if (s.nama === "Lainnya" && s.isi.size) el("div", "rinci", "Isi: " + [...s.isi.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${rpPendek(v)}`).join(", "));
+}
+function posisiTip(x, y) {
+  const tip = $("donatTip"), w = $("donat").clientWidth;
+  const setengah = Math.min(110, tip.offsetWidth / 2 || 90);
+  tip.style.left = Math.min(w - setengah + 30, Math.max(setengah - 30, x)) + "px";
+  tip.style.top = y + "px";
+  tip.classList.toggle("bawah", y < tip.offsetHeight + 24);   // dekat tepi atas → tampil di bawah kursor
+}
+function aktifkanDonat(nama, titikLayar, pakaiPanel = true) {
+  const s = donatSeg.find((x) => x.nama === nama);
+  if (!s) return matikanDonat();
+  donatAktif = nama;
+  $("donat").classList.add("ada-aktif"); document.querySelector(".kat-wrap").classList.add("ada-aktif");
+  donatSeg.forEach((x) => { x.el.classList.toggle("aktif", x === s); x.el.style.transform = x === s ? `translate(${s.dx}px, ${s.dy}px)` : ""; });
+  $("kategori").querySelectorAll(".kat").forEach((k) => k.classList.toggle("aktif", k.dataset.grup === nama));
+  tulisTengah(s);
+  if (titikLayar) {                     // mouse: kotak kecil mengikuti kursor
+    isiTip(s, $("donatTip")); posisiTip(titikLayar[0], titikLayar[1]);
+    $("donatTip").classList.add("on"); $("donatDetail").classList.remove("on");
+  } else if (!pakaiPanel) {             // hover di daftar: cukup sorot segmen + angka tengah (tanpa menggeser tata letak)
+    $("donatTip").classList.remove("on"); $("donatDetail").classList.remove("on");
+  } else {                              // ketuk (HP) / keyboard: panel di bawah lingkaran, tidak menutupi apa pun
+    isiTip(s, $("donatDetailIsi"));
+    $("donatDetail").classList.add("on"); $("donatTip").classList.remove("on");
+  }
+}
+function matikanDonat() {
+  donatAktif = null;
+  $("donat").classList.remove("ada-aktif"); document.querySelector(".kat-wrap")?.classList.remove("ada-aktif");
+  donatSeg.forEach((x) => { x.el?.classList.remove("aktif"); if (x.el) x.el.style.transform = ""; });
+  $("kategori").querySelectorAll(".kat").forEach((k) => k.classList.remove("aktif"));
+  $("donatTip").classList.remove("on"); $("donatDetail").classList.remove("on"); tulisTengah(null);
+}
+(function pasangDonat() {
+  const w = $("donat");
+  const posisi = (e) => { const b = w.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  w.addEventListener("pointermove", (e) => { const seg = e.target.closest(".seg"); if (seg && e.pointerType === "mouse") { titikTerakhir = posisi(e); aktifkanDonat(seg.dataset.grup, titikTerakhir); } });
+  w.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") matikanDonat(); });
+  w.addEventListener("click", (e) => { const seg = e.target.closest(".seg"); if (!seg) return matikanDonat(); aktifkanDonat(seg.dataset.grup, e.pointerType === "mouse" ? posisi(e) : null); });
+  w.addEventListener("focusin", (e) => { const seg = e.target.closest(".seg"); if (seg && !$("donatTip").classList.contains("on")) aktifkanDonat(seg.dataset.grup, null); });
+  w.addEventListener("focusout", () => matikanDonat());
+  w.addEventListener("keydown", (e) => { if (e.key === "Escape") { matikanDonat(); e.target.blur?.(); } });
+  const daftar = $("kategori");
+  daftar.addEventListener("pointerover", (e) => { const k = e.target.closest(".kat"); if (k && e.pointerType === "mouse") aktifkanDonat(k.dataset.grup, null, false); });
+  daftar.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") matikanDonat(); });
+  document.addEventListener("pointerdown", (e) => { if (donatAktif && !e.target.closest("#donat") && !e.target.closest("#kategori")) matikanDonat(); });
+  addEventListener("resize", () => { if (donatAktif) aktifkanDonat(donatAktif, null); });
+})();
 
 // ===== Gauge setengah lingkaran (zona hemat / normal / abnormal / boncos) =====
 function gambarGauge(s) {
